@@ -27,9 +27,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
 
-import static com.android.SdkConstants.PLATFORM_WINDOWS
-import static com.android.SdkConstants.currentPlatform
-
 /**
  * A physical file and the {@link DexData} contained therein.
  *
@@ -55,9 +52,14 @@ class DexFile {
      * @return a list of DexFile objects representing data in the given file.
      */
     static List<DexFile> extractDexData(File file, int dxTimeoutSecs) {
-        // AAR files need special treatment
-        if (file.name.endsWith(".aar")) {
+        // AAR files contain classes.jar which need to be extracted before converting to dex
+        if (file.name.toLowerCase().endsWith(".aar")) {
             return extractDexFromAar(file, dxTimeoutSecs);
+        }
+
+        // JAR files are directly converted to dex
+        if (file.name.toLowerCase().endsWith(".jar")) {
+            return extractDexFromJar(file, dxTimeoutSecs)
         }
 
         try {
@@ -80,8 +82,13 @@ class DexFile {
         zipfile.getInputStream(jarFile).withStream { input ->
             IOUtil.drainToFile(input, tempClasses)
         }
+
+        return extractDexFromJar(tempClasses, dxTimeoutSecs)
+    }
+
+    private static List<DexFile> extractDexFromJar(File jarFile, int dxTimeoutSecs) {
         // convert it to DEX format by using the Android dx tool
-        def androidSdkHome = DexMethodCountPlugin.sdkLocation
+        def androidSdkHome = java.lang.System.getenv("ANDROID_HOME") //DexMethodCountPlugin.sdkLocation TODO: rework SDK detection to support non-gradle environment
         if (androidSdkHome == null) {
             throw new Exception("Android SDK not found!")
         }
@@ -94,7 +101,7 @@ class DexFile {
         }
 
         def dxExe
-        if (currentPlatform() == PLATFORM_WINDOWS) {
+        if (System.getProperty("os.name").toLowerCase().contains("windows")) {
             dxExe = new File(dirs[0], "dx.bat")
         } else {
             dxExe = new File(dirs[0], "dx")
@@ -108,7 +115,7 @@ class DexFile {
         def tempDex = File.createTempFile("classes", ".dex")
         tempDex.deleteOnExit()
 
-        def dxCmd = dxExe.absolutePath + " --dex --output=" + tempDex.absolutePath + " " + tempClasses.absolutePath
+        def dxCmd = dxExe.absolutePath + " --dex --output=" + tempDex.absolutePath + " " + jarFile.absolutePath
 
         final def sout = new StringBuilder()
         final def serr = new StringBuilder()

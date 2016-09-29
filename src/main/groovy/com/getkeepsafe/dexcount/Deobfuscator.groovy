@@ -16,7 +16,6 @@
 
 package com.getkeepsafe.dexcount
 
-import com.android.annotations.Nullable
 import proguard.obfuscate.MappingProcessor
 import proguard.obfuscate.MappingReader
 
@@ -27,7 +26,7 @@ import proguard.obfuscate.MappingReader
 class Deobfuscator {
     private final Map<String, String> mapping;
 
-    static Deobfuscator create(@Nullable File mappingFile) {
+    static Deobfuscator create(File mappingFile) {
         if (mappingFile == null) {
             return EMPTY
         }
@@ -35,7 +34,7 @@ class Deobfuscator {
         return new Deobfuscator(new MappingReader(mappingFile))
     }
 
-    protected Deobfuscator(@Nullable MappingReader reader) {
+    protected Deobfuscator(MappingReader reader) {
         mapping = new TreeMap<>()
         if (reader != null) {
             reader.pump(new Processor())
