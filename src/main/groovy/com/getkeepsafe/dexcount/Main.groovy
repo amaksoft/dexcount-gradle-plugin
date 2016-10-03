@@ -6,7 +6,7 @@ import org.apache.commons.cli.CommandLine
 import org.apache.commons.cli.CommandLineParser
 import org.apache.commons.cli.DefaultParser
 import org.apache.commons.cli.HelpFormatter
-import org.apache.commons.cli.OptionBuilder
+import org.apache.commons.cli.Option
 import org.apache.commons.cli.Options
 import org.apache.commons.cli.ParseException
 
@@ -21,48 +21,71 @@ public class Main {
 
     public static void main(String[] args) {
 
+        String outputFileName, inputFileName;
+        OutputFormat oFormat = OutputFormat.LIST;
+
 // create the command line parser
         CommandLineParser parser = new DefaultParser();
 
 // create the Options
         Options options = new Options();
-        options.addOption( "a", "all", false, "do not hide entries starting with ." );
-        options.addOption( "A", "almost-all", false, "do not list implied . and .." );
-        options.addOption( "b", "escape", false, "print octal escapes for nongraphic "
-                + "characters" );
-        options.addOption( OptionBuilder.withLongOpt( "block-size" )
-                .withDescription( "use SIZE-byte blocks" )
+        options.addOption(Option.builder("f")
+                .longOpt("output-format")
+                .desc("specify output format. Options available:\n" +
+                "\tLIST - .txt file with results represented as list\n" +
+                "\tTREE - .txt file with tree-like result\n" +
+                "\tJSON - .json file\n" +
+                "\tYAML - .yml file")
                 .hasArg()
-                .withArgName("SIZE")
-                .create() );
-        options.addOption( "B", "ignore-backups", false, "do not list implied entried "
-                + "ending with ~");
-        options.addOption( "c", false, "with -lt: sort by, and show, ctime (time of last "
-                + "modification of file status information) with "
-                + "-l:show ctime and sort by name otherwise: sort "
-                + "by ctime" );
-        options.addOption( "C", false, "list entries by columns" );
+                .argName("TYPE")
+                .type(OutputFormat)
+                .build());
+        options.addOption(Option.builder("o")
+                .longOpt("output-file")
+                .required()
+                .desc("specify output file name")
+                .hasArg()
+                .argName("FILE NAME")
+                .build());
+        options.addOption(Option.builder("i")
+                .longOpt("input-file")
+                .required()
+                .desc("specify input file name")
+                .hasArg()
+                .argName("FILE NAME")
+                .build());
+
+        options.addOption("h", "help", false, "Print this help message")
 
         String header = "Do something useful with an input file\n\n";
         String footer = "\nPlease report issues at http://example.com/issues";
 
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("myapp", header, options, footer, true);
-
         try {
             // parse the command line arguments
-            CommandLine line = parser.parse( options, args );
+            CommandLine line = parser.parse(options, args);
 
-            // validate that block-size has been set
-            if( line.hasOption( "block-size" ) ) {
-                // print the value of block-size
-                System.out.println( line.getOptionValue( "block-size" ) );
+            if (line.hasOption("help")) {
+                HelpFormatter formatter = new HelpFormatter();
+                formatter.printHelp("dexcounter", header, options, footer, true);
+            }
+            if (line.hasOption("output-format")) {
+                oFormat = line.getOptionValue("output-format");
+                System.out.println("oFormat = " + oFormat);
+            }
+            if (line.hasOption("output-file")) {
+                outputFileName = line.getOptionValue("output-file");
+                System.out.println("outputFileName = " + outputFileName);
+            }
+            if (line.hasOption("input-file")) {
+                inputFileName = line.getOptionValue("input-file");
+                System.out.println("inputFileName = " + inputFileName);
             }
         }
-        catch( ParseException exp ) {
-            System.out.println( "Unexpected exception:" + exp.getMessage() );
+        catch (ParseException exp) {
+            System.out.println("ERROR " + exp.getMessage());
+            return;
         }
-        File extrFile = new File(args[0]);
+        File extrFile = new File(inputFileName);
         List<DexFile> dataList = DexFile.extractDexData(extrFile, 10);
         System.out.println(dataList);
 
@@ -84,6 +107,8 @@ public class Main {
                 dFile.dispose();
             }
         }
-        tree.print(new FileWriter(args[1]), OutputFormat.JSON, new PrintOptions());
+        FileWriter extrWriter = new FileWriter(outputFileName);
+        tree.print(extrWriter, oFormat, new PrintOptions());
+        extrWriter.close()
     }
 }

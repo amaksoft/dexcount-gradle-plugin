@@ -117,6 +117,21 @@ class DexMethodCountPlugin implements Plugin<Project> {
         task.dependsOn(variant.assemble)
         task.mustRunAfter(variant.assemble)
 
+        def taskLibs = project.tasks.create("count${slug}LibMethods", DexLibsCount)
+        taskLibs.variant = variant;
+        taskLibs.description = "Outputs dex method count for ${variant.name}."
+        taskLibs.group = 'Reporting'
+//        taskLibs.mappingFile = variant.mappingFile
+//        taskLibs.outputFile = project.file(path + format.extension)
+//        taskLibs.summaryFile = project.file(path + '.csv')
+//        taskLibs.chartDir = project.file(path + 'Chart')
+//        taskLibs.config = ext
+
+        // Dexcount tasks require that assemble has been run...
+        taskLibs.dependsOn(variant.assemble)
+        taskLibs.mustRunAfter(variant.assemble)
+
+
         // But assemble should always imply that dexcount runs, unless configured not to.
         def runOnEachAssemble = ext.runOnEachAssemble
         if (runOnEachAssemble) {
