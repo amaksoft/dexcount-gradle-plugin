@@ -103,20 +103,6 @@ class DexMethodCountPlugin implements Plugin<Project> {
             ext.printVersion = true
         }
 
-        def task = project.tasks.create("count${slug}DexMethods", DexMethodCountTask)
-        task.description = "Outputs dex method count for ${variant.name}."
-        task.group = 'Reporting'
-        task.apkOrDex = output
-        task.mappingFile = variant.mappingFile
-        task.outputFile = project.file(path + format.extension)
-        task.summaryFile = project.file(path + '.csv')
-        task.chartDir = project.file(path + 'Chart')
-        task.config = ext
-
-        // Dexcount tasks require that assemble has been run...
-        task.dependsOn(variant.assemble)
-        task.mustRunAfter(variant.assemble)
-
         def taskLibs = project.tasks.create("count${slug}LibMethods", DexLibsCount)
         taskLibs.variant = variant;
         taskLibs.description = "Outputs dex method count for ${variant.name}."
@@ -128,9 +114,22 @@ class DexMethodCountPlugin implements Plugin<Project> {
 //        taskLibs.config = ext
 
         // Dexcount tasks require that assemble has been run...
-        taskLibs.dependsOn(variant.assemble)
-        taskLibs.mustRunAfter(variant.assemble)
+//        taskLibs.dependsOn(variant.assemble)
+//        taskLibs.mustRunAfter(variant.assemble)
 
+        def task = project.tasks.create("count${slug}DexMethods", DexMethodCountTask)
+        task.description = "Outputs dex method count for ${variant.name}."
+        task.group = 'Reporting'
+        task.apkOrDex = output
+        task.mappingFile = variant.mappingFile
+        task.outputFile = project.file(path + format.extension)
+        task.summaryFile = project.file(path + '.csv')
+        task.chartDir = project.file(path + 'Chart')
+        task.config = ext
+
+        // Dexcount tasks require that assemble has been run...
+        task.dependsOn(taskLibs)
+        task.mustRunAfter(taskLibs)
 
         // But assemble should always imply that dexcount runs, unless configured not to.
         def runOnEachAssemble = ext.runOnEachAssemble

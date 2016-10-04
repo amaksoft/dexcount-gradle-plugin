@@ -24,6 +24,7 @@ import com.google.gson.stream.JsonWriter
 import groovy.transform.CompileStatic
 import groovy.transform.stc.ClosureParams
 import groovy.transform.stc.FirstParam
+import org.gradle.internal.impldep.org.sonatype.maven.polyglot.groovy.builder.factory.StringFactory
 
 import java.nio.CharBuffer
 
@@ -40,7 +41,8 @@ class PackageTree {
 
     private final boolean isClass_
     private final String name_
-    private final SortedMap<String, PackageTree> children_ = new TreeMap<>()
+    private final TreeMap<String, PackageTree> children_ = new TreeMap<>()
+    private final HashSet<String> sources = new HashSet()
     private final Deobfuscator deobfuscator_;
 
     // The set of methods declared on this node.  Will be empty for package
@@ -63,7 +65,7 @@ class PackageTree {
         this(name, isClassName(name), deobfuscator)
     }
 
-    private PackageTree(name, isClass, Deobfuscator deobfuscator) {
+    PackageTree(name, isClass, Deobfuscator deobfuscator) {
         this.name_ = name
         this.isClass_ = isClass
         this.deobfuscator_ = (deobfuscator ?: new Deobfuscator(null))
@@ -74,14 +76,26 @@ class PackageTree {
     }
 
     public void addMethodRef(MethodRef method) {
-        addInternal(descriptorToDot(method), 0, true, method)
+        addInternal(descriptorToDot(method), 0, true, method, "")
     }
 
     public void addFieldRef(FieldRef field) {
-        addInternal(descriptorToDot(field), 0, false, field)
+        addInternal(descriptorToDot(field), 0, false, field, "")
     }
 
-    private void addInternal(String name, int startIndex, boolean isMethod, HasDeclaringClass ref) {
+    public void addMethodRef(MethodRef method, String src) {
+        addInternal(descriptorToDot(method), 0, true, method, src)
+    }
+
+    public void addFieldRef(FieldRef field, String src) {
+        addInternal(descriptorToDot(field), 0, false, field, src)
+    }
+
+    public void addSource(String src) {
+        sources.add(src)
+    }
+
+    private void addInternal(String name, int startIndex, boolean isMethod, HasDeclaringClass ref, String src) {
         def ix = name.indexOf('.', startIndex)
         def segment = ix == -1 ? name.substring(startIndex) : name.substring(startIndex, ix)
         def child = children_[segment]
@@ -89,6 +103,7 @@ class PackageTree {
             child = children_[segment] = new PackageTree(segment, deobfuscator_)
         }
 
+        child.sources.add(src);
         if (ix == -1) {
             if (isMethod) {
                 child.methods_.add((MethodRef) ref)
@@ -101,7 +116,7 @@ class PackageTree {
             } else {
                 fieldTotal_ = -1
             }
-            child.addInternal(name, ix + 1, isMethod, ref)
+            child.addInternal(name, ix + 1, isMethod, ref, src)
         }
     }
 
@@ -271,18 +286,28 @@ class PackageTree {
 
         json.beginObject()
 
-        json.name("name").value(name_)
+//        if (isPrintable(opts)) {
 
-        if (opts.includeMethodCount) {
-            json.name("methods").value(methodCount)
-        }
+            json.name("name").value(name_)
 
-        if (opts.includeFieldCount) {
-            json.name("fields").value(fieldCount)
-        }
+            json.name("sources")
+            json.beginArray()
+            sources.each {
+                json.value(it)
+            }
+            json.endArray()
 
-        json.name("children")
-        json.beginArray()
+            if (opts.includeMethodCount) {
+                json.name("methods").value(methodCount)
+            }
+
+            if (opts.includeFieldCount) {
+                json.name("fields").value(fieldCount)
+            }
+
+            json.name("children")
+            json.beginArray()
+//        }
 
         forEach(getChildren(opts)) { PackageTree it -> it.printJsonRecursively(json, depth + 1, opts) }
 

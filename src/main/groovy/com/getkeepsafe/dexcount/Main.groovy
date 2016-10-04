@@ -18,6 +18,7 @@ import java.lang.System;
 public class Main {
 
     static PackageTree tree;
+    static boolean printClasses;
 
     public static void main(String[] args) {
 
@@ -54,6 +55,11 @@ public class Main {
                 .hasArg()
                 .argName("FILE NAME")
                 .build());
+        options.addOption(Option.builder()
+                .longOpt("print-classes")
+                .desc("use if you want classes included in report")
+                .build());
+
 
         options.addOption("h", "help", false, "Print this help message")
 
@@ -80,6 +86,9 @@ public class Main {
                 inputFileName = line.getOptionValue("input-file");
                 System.out.println("inputFileName = " + inputFileName);
             }
+            if (line.hasOption("print-classes")) {
+                printClasses = true;
+            }
         }
         catch (ParseException exp) {
             System.out.println("ERROR " + exp.getMessage());
@@ -87,7 +96,7 @@ public class Main {
         }
         File extrFile = new File(inputFileName);
         List<DexFile> dataList = DexFile.extractDexData(extrFile, 10);
-        System.out.println(dataList);
+//        System.out.println(dataList);
 
         try {
             tree = new PackageTree();
@@ -108,7 +117,15 @@ public class Main {
             }
         }
         FileWriter extrWriter = new FileWriter(outputFileName);
-        tree.print(extrWriter, oFormat, new PrintOptions());
+        tree.print(extrWriter, oFormat, new PrintOptions(
+                includeMethodCount: true,
+                includeFieldCount: true,
+                includeTotalMethodCount: true,
+                teamCityIntegration: false,
+                orderByMethodCount: false,
+                includeClasses: printClasses,
+                printHeader: true,
+                maxTreeDepth: Integer.MAX_VALUE));
         extrWriter.close()
     }
 }
