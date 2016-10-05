@@ -105,6 +105,8 @@ class DexMethodCountPlugin implements Plugin<Project> {
 
         def taskLibs = project.tasks.create("count${slug}LibMethods", DexLibsCount)
         taskLibs.variant = variant;
+        taskLibs.apkOrDex = output;
+        taskLibs.project = project;
         taskLibs.description = "Outputs dex method count for ${variant.name}."
         taskLibs.group = 'Reporting'
 //        taskLibs.mappingFile = variant.mappingFile

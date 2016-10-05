@@ -95,6 +95,10 @@ class PackageTree {
         sources.add(src)
     }
 
+    public void addChild(String name, PackageTree child){
+        children_.put(name, child)
+    }
+
     private void addInternal(String name, int startIndex, boolean isMethod, HasDeclaringClass ref, String src) {
         def ix = name.indexOf('.', startIndex)
         def segment = ix == -1 ? name.substring(startIndex) : name.substring(startIndex, ix)
@@ -286,14 +290,14 @@ class PackageTree {
 
         json.beginObject()
 
-//        if (isPrintable(opts)) {
+        if (isPrintable(opts)) {
 
             json.name("name").value(name_)
 
             json.name("sources")
             json.beginArray()
-            sources.each {
-                json.value(it)
+            sources.each { src ->
+                if (src != null ) json.value(src)
             }
             json.endArray()
 
@@ -307,7 +311,7 @@ class PackageTree {
 
             json.name("children")
             json.beginArray()
-//        }
+        }
 
         forEach(getChildren(opts)) { PackageTree it -> it.printJsonRecursively(json, depth + 1, opts) }
 

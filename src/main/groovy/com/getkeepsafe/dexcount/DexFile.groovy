@@ -20,6 +20,7 @@ import com.android.dexdeps.DexData
 import com.android.dexdeps.DexDataException
 import com.android.dexdeps.FieldRef
 import com.android.dexdeps.MethodRef
+import org.gradle.api.file.FileTree
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -37,6 +38,7 @@ import java.util.zip.ZipFile
 class DexFile {
     public final DexData data
     public final boolean isInstantRun
+    private ArrayList<String> jarContents;
     private RandomAccessFile raf
     private File file
     private boolean isTemp
@@ -88,9 +90,24 @@ class DexFile {
 
     private static List<DexFile> extractDexFromJar(File jarFile, int dxTimeoutSecs) {
         // convert it to DEX format by using the Android dx tool
-        def androidSdkHome = java.lang.System.getenv("ANDROID_HOME") //DexMethodCountPlugin.sdkLocation TODO: rework SDK detection to support non-gradle environment
+        def androidSdkHome
+        try {
+            androidSdkHome = DexMethodCountPlugin.sdkLocation
+        } catch (IOException e){
+            androidSdkHome = java.lang.System.getenv("ANDROID_HOME")
+        }
         if (androidSdkHome == null) {
             throw new Exception("Android SDK not found!")
+        }
+
+        ZipFile zipFile = new ZipFile(jarFile);
+        ArrayList<String> jarContents = new ArrayList<>()
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while(entries.hasMoreElements()){
+            ZipEntry entry = entries.nextElement();
+            if(!entry.name.startsWith("META_INF")) {
+                jarContents.add(entry.name)
+            }
         }
 
         def buildToolsSubDirs = new File(androidSdkHome, "build-tools")
@@ -147,8 +164,11 @@ class DexFile {
             throw new DexCountException("Error converting classes.jar into classes.dex: $serr")
         }
 
+        DexFile dFile = new DexFile(tempDex, true);
+        dFile.setJarContents(jarContents);
+
         // return resulting dex file in a list
-        return [ new DexFile(tempDex, true) ]
+        return [ dFile ]
     }
 
     /**
@@ -250,5 +270,13 @@ class DexFile {
         if (isTemp) {
             file.delete()
         }
+    }
+
+    ArrayList<String> getJarContents() {
+        return jarContents
+    }
+
+    void setJarContents(ArrayList<String> jarContents) {
+        this.jarContents = jarContents
     }
 }
