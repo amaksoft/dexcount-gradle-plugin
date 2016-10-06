@@ -26,7 +26,7 @@ import org.gradle.api.logging.LogLevel
 import org.gradle.api.logging.Logger
 import org.gradle.api.tasks.TaskAction
 
-class DexMethodCountTask extends DefaultTask {
+class DexLibMethodCountTask extends DefaultTask {
     /**
      * The maximum number of method refs and field refs allowed in a single Dex
      * file.
@@ -57,7 +57,18 @@ class DexMethodCountTask extends DefaultTask {
     void countMethods() {
         try {
             printPreamble()
-            generatePackageTree()
+
+
+
+
+            // Create a de-obfuscator based on the current Proguard mapping file.
+            // If none is given, we'll get a default mapping.
+            def deobs = getDeobfuscator()
+            //Create Package
+            tree = new PackageTree(deobs)
+            // Adding project data to the tree
+            generatePackageTree(apkOrDex.outputFile)
+
             printSummary()
             printFullTree()
             printChart()
@@ -213,19 +224,13 @@ class DexMethodCountTask extends DefaultTask {
      * counts of the current dex/apk file.
      */
     @VisibleForTesting
-    def generatePackageTree() {
+    def generatePackageTree(File inputFile) {
         startTime = System.currentTimeMillis()
 
-        // Create a de-obfuscator based on the current Proguard mapping file.
-        // If none is given, we'll get a default mapping.
-        def deobs = getDeobfuscator()
-
-        def dataList = DexFile.extractDexData(apkOrDex.outputFile, config.dxTimeoutSec)
+        def dataList = DexFile.extractDexData(inputFile, config.dxTimeoutSec)
 
         ioTime = System.currentTimeMillis()
         try {
-            tree = new PackageTree(deobs)
-
             dataList*.getMethodRefs().flatten().each {
                 tree.addMethodRef(it)
             }
@@ -239,7 +244,7 @@ class DexMethodCountTask extends DefaultTask {
 
         treegenTime = System.currentTimeMillis()
 
-        isInstantRun = dataList.any { it.isInstantRun }
+//        isInstantRun = dataList.any { it.isInstantRun } This task is slow, we won't run int during instant run
     }
 
     private def getPrintOptions() {
@@ -263,5 +268,16 @@ class DexMethodCountTask extends DefaultTask {
         }
 
         return Deobfuscator.create(mappingFile)
+    }
+
+    public String humanReadableByteCount (long bytes, boolean si) {
+
+        int unit = si ? 1000 : 1024;
+        if (bytes < unit) return bytes + " B";
+        int exp = (int) (Math.log (bytes) / Math.log (unit));
+        String siPre = (si ? "" : "i");
+        String pre = (si ? "KMGTPE" : "KMGTPE").charAt (exp - 1)
+        return String.format ("%.1f %s%sB",
+                bytes / Math.pow (unit, exp),pre,siPre);
     }
 }

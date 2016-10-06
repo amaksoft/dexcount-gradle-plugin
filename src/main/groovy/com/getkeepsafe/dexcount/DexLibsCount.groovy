@@ -1,15 +1,12 @@
 package com.getkeepsafe.dexcount
 
-import com.android.build.gradle.api.BaseVariant
 import com.android.build.gradle.api.BaseVariantOutput
-import com.android.builder.core.VariantConfiguration
 import com.android.dexdeps.FieldRef
 import com.android.dexdeps.HasDeclaringClass
 import com.android.dexdeps.MethodRef
-import org.apache.commons.io.FileUtils
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import org.gradle.api.DefaultTask
-import org.gradle.api.Project
-import org.gradle.api.file.FileTree
 import org.gradle.api.tasks.TaskAction
 
 /**
@@ -17,61 +14,65 @@ import org.gradle.api.tasks.TaskAction
  */
 class DexLibsCount extends DefaultTask {
 
-    public BaseVariant variant;
     public BaseVariantOutput apkOrDex;
+
+    def long startTime
+    def long ioTime
+    def long treegenTime
+    def long outputTime
+
 
     @TaskAction
     void countMethods() {
+
+        ArrayList<GrDep> deps = new ArrayList()
+        project.configurations.compile.getResolvedConfiguration().getResolvedArtifacts().sort().eachWithIndex { at, idx ->
+            def dep = at.getModuleVersion().getId()
+            deps.add(new GrDep(dep.group, dep.name, dep.version, at.getFile()))
+        }
+        deps.add(new GrDep(project.group.toString(), project.name.toString(), project.version.toString(), apkOrDex.outputFile))
+
         try {
             PackageTree libTree = new PackageTree(project.name, false, null);
-            HashMap<String, Integer> libs = new HashMap()
-            ArrayList<File> inputs = new ArrayList<>()
-            inputs.addAll(getProject().configurations.compile.files)
-            inputs.add(apkOrDex.outputFile)
-            inputs.each { file ->
-                println "indexing ${file.name} ..."
-                String hrFilesize = FileUtils.byteCountToDisplaySize(file.length())
-                println "size: " + hrFilesize
-                libTree.addSource(file.name);
-                File extrFile = new File(file.path);
+
+            deps.eachWithIndex { dep, idx ->
+                println "indexing ${dep.file.name} ..."
+
+                File extrFile = new File(dep.file.path);
                 List<DexFile> dataList = DexFile.extractDexData(extrFile, 10);
                 try {
-                    int totalMethods = 0;
-                    int importedMethods = 0;
-                    int totalFields = 0;
-                    int importedFields = 0;
                     for(DexFile dFile : dataList) {
-                        totalMethods += dFile.methodRefs.size()
+                        dep.incTotalMethods(dFile.methodRefs.size())
                         for(MethodRef mRef : dFile.getMethodRefs()) {
                             def className = mRef.getDeclClassName().substring(1, mRef.getDeclClassName().length() - 1);
                             boolean imported = dFile.jarContents != null && !dFile.jarContents.contains(className + ".class")
                             if(dFile.jarContents != null && !imported) {
-                                println "own method ${className}.${mRef.name}"
-                                libTree.addMethodRef(mRef, file.name);
+//                                println "own method ${className}.${mRef.name}"
+                                libTree.addMethodRef(mRef, idx.toString());
+                                dep.incOwnMethods()
                             } else {
-                                println "imported method ${className}.${mRef.name}"
-                                importedMethods++;
+//                                println "imported method ${className}.${mRef.name}"
                                 libTree.addMethodRef(mRef, null);
                             }
                         }
                     }
                     for(DexFile dFile : dataList) {
-                        totalFields += dFile.fieldRefs.size()
+                        dep.incTotalFields(dFile.fieldRefs.size())
                         for(FieldRef fRef : dFile.getFieldRefs()) {
                             def className = fRef.getDeclClassName().substring(1, fRef.getDeclClassName().length() - 1);
                             boolean imported = dFile.jarContents != null && !dFile.jarContents.contains(className + ".class")
                             if(dFile.jarContents != null && !imported) {
-                                libTree.addFieldRef(fRef, file.name);
+                                libTree.addFieldRef(fRef, idx.toString());
+                                dep.incOwnFields()
                             } else {
-                                importedFields++;
                                 libTree.addFieldRef(fRef, null);
                             }
                         }
                     }
-                    println "own methods: ${totalMethods - importedMethods}"
-                    println "total methods: ${totalMethods}"
-                    println "own fields: ${totalFields - importedFields}"
-                    println "total fields: ${totalFields}"
+                    println "own methods: ${dep.ownMethods}"
+                    println "total methods: ${dep.totalMethods}"
+                    println "own fields: ${dep.ownFields}"
+                    println "total fields: ${dep.totalFields}"
                 } finally {
                     for(DexFile dFile : dataList) {
                         dFile.dispose();
@@ -79,36 +80,37 @@ class DexLibsCount extends DefaultTask {
                 }
             }
 
-            System.out.println("Writing to file");
-            FileWriter extrWriter = new FileWriter(getProject().buildDir.path +"/" + project.name + ".json");
-            libTree.print(extrWriter, OutputFormat.JSON, new PrintOptions(
-                    includeMethodCount: true,
-                    includeFieldCount: true,
-                    includeTotalMethodCount: true,
-                    teamCityIntegration: false,
-                    orderByMethodCount: true,
-                    includeClasses: false,
-                    printHeader: true,
-                    maxTreeDepth: Integer.MAX_VALUE));
-            extrWriter.close()
+            JsonArray jsonArray = new JsonArray()
+            deps.each { GrDep entry ->
+                jsonArray.add(entry.toJsonObject())
+            }
+
+            File outFile = new File("${project.buildDir}/outputs/reports/libsReport", "libdata.js")
+            outFile.parentFile.mkdirs();
+            System.out.println("Writing to file ${outFile.path}");
+            IOUtil.printToFile(outFile) { PrintStream out ->
+                out.print("var data = { \"libs\": \n  ${jsonArray.toString()},\n")
+                out.print("  \"dex\": ")
+                libTree.printJson(out, new PrintOptions(
+                        includeMethodCount: true,
+                        includeFieldCount: true,
+                        includeTotalMethodCount: true,
+                        teamCityIntegration: false,
+                        orderByMethodCount: true,
+                        includeClasses: false,
+                        printHeader: true,
+                        maxTreeDepth: Integer.MAX_VALUE));
+                out.print("\n}")
+            }
+
         } catch (DexCountException e) {
 
         }
-    }
-
-    public String humanReadableByteCount (long bytes, boolean si) {
-
-        int unit = si ? 1000 : 1024;
-        if (bytes < unit) return bytes + " B";
-        int exp = (int) (Math.log (bytes) / Math.log (unit));
-        String siPre = (si ? "" : "i");
-        String pre = (si ? "KMGTPE" : "KMGTPE").charAt (exp - 1)
-        return String.format ("%.1f %s%sB",
-                bytes / Math.pow (unit, exp),pre,siPre);
     }
 
     private static boolean isInClassFile(HasDeclaringClass ref, DexFile dFile) {
         def className = ref.getDeclClassName().substring(1, ref.getDeclClassName().length() - 1);
         return dFile.jarContents.contains(className+".class")
     }
+
 }

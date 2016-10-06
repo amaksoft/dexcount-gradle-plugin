@@ -16,8 +16,11 @@
 
 package com.getkeepsafe.dexcount
 
+import groovy.transform.stc.ClosureParams
+import groovy.transform.stc.SimpleType
+
 class IOUtil {
-    static def drainToFile(InputStream stream, File file) {
+    public static def drainToFile(InputStream stream, File file) {
         stream.withStream { input ->
             file.withOutputStream { output ->
                 def buf = new byte[4096]
@@ -29,4 +32,19 @@ class IOUtil {
             }
         }
     }
+    public static void printToFile(
+            File file,
+            @ClosureParams(value = SimpleType, options = ['java.io.PrintStream']) Closure closure) {
+        if (file != null) {
+            file.parentFile.mkdirs()
+            file.createNewFile()
+            file.withOutputStream { stream ->
+                def out = new PrintStream(stream)
+                closure(out)
+                out.flush()
+                out.close()
+            }
+        }
+    }
+
 }
